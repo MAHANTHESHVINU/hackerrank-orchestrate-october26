@@ -96,3 +96,7 @@ During development and continuous evaluation, four significant failure patterns 
 ### 4. Step Ordering and Verification Serialization
 - **Failure**: Grader requires strict adherence to phase ordering (`FINDING` -> `REMEDIATION` -> `VERIFICATION`), internal operation sorting, and alphabetical sorting by `system_id` and `resource_id`.
 - **Fix**: Centralized step sorting under `step_sort_key()` with explicit integer ranks for operations and re-indexing step numbers from 1 to N after phase assembly.
+
+## Known Remaining Limitations
+
+Although sample status accuracy is 100%, exact full-sequence accuracy is 7/32 (21.88%). Sequence mismatches remain unresolved. For example, case_31 predicted account_541 instead of account_4857, and case_32 predicted account_542 instead of account_8858. The improvements described above did not eliminate every sequence-level failure. The output has been structurally evaluated, but these results do not establish full correctness on the hidden benchmark.
