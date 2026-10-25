@@ -1216,7 +1216,42 @@ def analyze_case(case, user_id, emails, evidence_idx, evidence_manifest_dict,
     
     resources = find_user_resources(user_id, all_emails, evidence_idx, 
                                     user_to_info, user_to_phones, email_hash_to_user)
-    
+
+    # Supplement evidence-derived resources only with explicit, successful identity
+    # links. Do not infer ownership from timestamps or activity proximity.
+    activity_resource_fields = {
+        "account_service": ("account", "account_records"),
+        "search_service": ("search", "search_records"),
+        "analytics_platform": ("analytics", "analytics_records"),
+        "support_platform": ("support", "support_records"),
+        "export_service": ("export", "export_records"),
+        "backup_service": ("backup", "backup_records"),
+        "security_service": ("security", "security_records"),
+        "integration_service": ("data_flow", "data_flow_records"),
+        "identity_service": ("tombstone", "tombstone_records"),
+        "marketing_platform": ("marketing", "marketing_records"),
+    }
+    normalized_emails = {email.strip().lower() for email in all_emails if email}
+    for activity in system_activity or []:
+        if (activity.get("event_type") != "LINK_RESOURCE_IDENTITY"
+                or str(activity.get("reported_result", "")).upper() != "SUCCESS"):
+            continue
+        details = str(activity.get("details", "")).lower()
+        linked_to_case = bool(user_id and re.search(
+            r"(?<![a-z0-9_])" + re.escape(str(user_id).lower()) + r"(?![a-z0-9_])",
+            details))
+        if not linked_to_case:
+            linked_to_case = any(email in details for email in normalized_emails)
+        if not linked_to_case:
+            continue
+        mapping = activity_resource_fields.get(activity.get("target_system"))
+        if not mapping:
+            continue
+        resource_key, records_attr = mapping
+        rid = str(activity.get("resource_id", "")).strip()
+        if rid and rid in getattr(evidence_idx, records_attr, {}):
+            resources[resource_key].add(rid)
+
     steps = []
     is_complete = True
     
