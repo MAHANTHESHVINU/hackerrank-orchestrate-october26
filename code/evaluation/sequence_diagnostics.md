@@ -56,10 +56,8 @@ Solution code and output.csv were not modified.
 - Predicted status: INCOMPLETE
 - Expected steps: 4
 - Predicted steps: 4
-- Exact sequence match: NO
-- Step 1: operation: expected='REPORT_REMAINING_RECORD', predicted='REPORT_EXPOSED_PII'
-- Step 2: operation: expected='DELETE_RECORD', predicted='REDACT_RECORD'; state: expected='ABSENT', predicted='REDACTED'
-- Step 4: operation: expected='VERIFY_RECORD_ABSENT', predicted='VERIFY_RECORD_REDACTED'; state: expected='ABSENT', predicted='REDACTED'
+- Exact sequence match: YES
+- No differences in the five compared fields.
 
 ## case_08
 - Expected status: INCOMPLETE
@@ -73,85 +71,57 @@ Solution code and output.csv were not modified.
 - Expected status: INCOMPLETE
 - Predicted status: INCOMPLETE
 - Expected steps: 5
-- Predicted steps: 4
-- Exact sequence match: NO
-- Step 3: resource_id: expected='account_3960', predicted='account_061'
-- Step 4: system_id: expected='security_service', predicted='backup_service'; resource_id: expected='audit_record_4902', predicted='backup_4978'; operation: expected='VERIFY_RECORD_PRESENT', predicted='VERIFY_RESTORE_BLOCKED'; state: expected='PRESENT', predicted='BLOCKED'
-- Expected step 5 is missing.
+- Predicted steps: 5
+- Exact sequence match: YES
+- No differences in the five compared fields.
 
 ## case_10
 - Expected status: INCOMPLETE
 - Predicted status: INCOMPLETE
 - Expected steps: 4
 - Predicted steps: 4
-- Exact sequence match: NO
-- Step 1: operation: expected='REPORT_REMAINING_RECORD', predicted='REPORT_EXPOSED_PII'
-- Step 2: operation: expected='DELETE_RECORD', predicted='REDACT_RECORD'; state: expected='ABSENT', predicted='REDACTED'
-- Step 4: operation: expected='VERIFY_RECORD_ABSENT', predicted='VERIFY_RECORD_REDACTED'; state: expected='ABSENT', predicted='REDACTED'
+- Exact sequence match: YES
+- No differences in the five compared fields.
 
 ## case_11
 - Expected status: INCOMPLETE
 - Predicted status: INCOMPLETE
 - Expected steps: 14
-- Predicted steps: 13
-- Exact sequence match: NO
-- Step 1: system_id: expected='search_service', predicted='account_service'; resource_id: expected='search_052', predicted='account_4248'
-- Step 2: system_id: expected='analytics_platform', predicted='search_service'; resource_id: expected='analytics_2034', predicted='search_052'; operation: expected='REPORT_EXPOSED_PII', predicted='REPORT_REMAINING_RECORD'
-- Step 3: system_id: expected='support_platform', predicted='analytics_platform'; resource_id: expected='support_864', predicted='analytics_2034'
-- Step 4: system_id: expected='integration_service', predicted='support_platform'; resource_id: expected='data_flow_9522', predicted='support_864'; operation: expected='REPORT_ACTIVE_DATA_FLOW', predicted='REPORT_EXPOSED_PII'; state: expected='ACTIVE', predicted='PRESENT'
-- Step 5: system_id: expected='integration_service', predicted='account_service'; resource_id: expected='data_flow_9522', predicted='account_4248'; operation: expected='DISABLE_DATA_FLOW', predicted='DELETE_RECORD'; state: expected='DISABLED', predicted='ABSENT'
-- Expected step 14 is missing.
+- Predicted steps: 14
+- Exact sequence match: YES
+- No differences in the five compared fields.
 
 ## case_12
 - Expected status: INCOMPLETE
 - Predicted status: INCOMPLETE
 - Expected steps: 5
 - Predicted steps: 5
-- Exact sequence match: NO
-- Step 1: operation: expected='REPORT_REMAINING_RECORD', predicted='REPORT_EXPOSED_PII'
-- Step 2: operation: expected='DELETE_RECORD', predicted='ANONYMIZE_RECORD'; state: expected='ABSENT', predicted='ANONYMIZED'
-- Step 4: system_id: expected='analytics_platform', predicted='security_service'; resource_id: expected='analytics_9914', predicted='audit_record_2945'; operation: expected='VERIFY_RECORD_ABSENT', predicted='VERIFY_RECORD_PRESENT'; state: expected='ABSENT', predicted='PRESENT'
-- Step 5: system_id: expected='security_service', predicted='analytics_platform'; resource_id: expected='audit_record_2945', predicted='analytics_9914'; operation: expected='VERIFY_RECORD_PRESENT', predicted='VERIFY_RECORD_ANONYMIZED'; state: expected='PRESENT', predicted='ANONYMIZED'
+- Exact sequence match: YES
+- No differences in the five compared fields.
 
 ## case_13
 - Expected status: INCOMPLETE
 - Predicted status: INCOMPLETE
 - Expected steps: 8
-- Predicted steps: 10
-- Exact sequence match: NO
-- Step 1: system_id: expected='search_service', predicted='account_service'; resource_id: expected='search_1308', predicted='account_9335'
-- Step 2: system_id: expected='support_platform', predicted='search_service'; resource_id: expected='support_4218', predicted='search_1308'
-- Step 3: phase: expected='REMEDIATION', predicted='FINDING'; system_id: expected='search_service', predicted='support_platform'; resource_id: expected='search_1308', predicted='support_4218'; operation: expected='DELETE_RECORD', predicted='REPORT_EXPOSED_PII'; state: expected='ABSENT', predicted='PRESENT'
-- Step 4: system_id: expected='support_platform', predicted='account_service'; resource_id: expected='support_4218', predicted='account_9335'
-- Step 5: phase: expected='VERIFICATION', predicted='REMEDIATION'; system_id: expected='account_service', predicted='search_service'; resource_id: expected='account_9335', predicted='search_1308'; operation: expected='VERIFY_RECORD_ABSENT', predicted='DELETE_RECORD'
-- Step 6: phase: expected='VERIFICATION', predicted='REMEDIATION'; system_id: expected='search_service', predicted='support_platform'; resource_id: expected='search_1308', predicted='support_4218'; operation: expected='VERIFY_RECORD_ABSENT', predicted='REDACT_RECORD'; state: expected='ABSENT', predicted='REDACTED'
-- Step 7: system_id: expected='support_platform', predicted='account_service'; resource_id: expected='support_4218', predicted='account_9335'
-- Step 8: system_id: expected='security_service', predicted='search_service'; resource_id: expected='audit_record_4816', predicted='search_1308'; operation: expected='VERIFY_RECORD_PRESENT', predicted='VERIFY_RECORD_ABSENT'; state: expected='PRESENT', predicted='ABSENT'
-- Unexpected predicted step 9.
-- Unexpected predicted step 10.
+- Predicted steps: 8
+- Exact sequence match: YES
+- No differences in the five compared fields.
 
 ## case_14
 - Expected status: INCOMPLETE
 - Predicted status: INCOMPLETE
 - Expected steps: 5
-- Predicted steps: 7
-- Exact sequence match: NO
-- Step 1: system_id: expected='backup_service', predicted='account_service'; resource_id: expected='backup_3870', predicted='account_3677'; operation: expected='REPORT_RESTORE_RISK', predicted='REPORT_REMAINING_RECORD'; state: expected='ACTIVE', predicted='PRESENT'
-- Step 2: phase: expected='REMEDIATION', predicted='FINDING'; operation: expected='BLOCK_RESTORE', predicted='REPORT_RESTORE_RISK'; state: expected='BLOCKED', predicted='ACTIVE'
-- Step 3: phase: expected='VERIFICATION', predicted='REMEDIATION'; system_id: expected='account_service', predicted='backup_service'; resource_id: expected='account_3677', predicted='backup_3870'; operation: expected='VERIFY_RECORD_ABSENT', predicted='BLOCK_RESTORE'; state: expected='ABSENT', predicted='BLOCKED'
-- Step 4: phase: expected='VERIFICATION', predicted='REMEDIATION'; system_id: expected='security_service', predicted='account_service'; resource_id: expected='audit_record_987', predicted='account_3677'; operation: expected='VERIFY_RECORD_PRESENT', predicted='DELETE_RECORD'; state: expected='PRESENT', predicted='ABSENT'
-- Step 5: system_id: expected='backup_service', predicted='account_service'; resource_id: expected='backup_3870', predicted='account_3677'; operation: expected='VERIFY_RESTORE_BLOCKED', predicted='VERIFY_RECORD_ABSENT'; state: expected='BLOCKED', predicted='ABSENT'
-- Unexpected predicted step 6.
-- Unexpected predicted step 7.
+- Predicted steps: 5
+- Exact sequence match: YES
+- No differences in the five compared fields.
 
 ## case_15
 - Expected status: INCOMPLETE
 - Predicted status: INCOMPLETE
 - Expected steps: 5
-- Predicted steps: 4
-- Exact sequence match: NO
-- Step 4: system_id: expected='security_service', predicted='integration_service'; resource_id: expected='audit_record_1596', predicted='data_flow_9846'; operation: expected='VERIFY_RECORD_PRESENT', predicted='VERIFY_DATA_FLOW_DISABLED'; state: expected='PRESENT', predicted='DISABLED'
-- Expected step 5 is missing.
+- Predicted steps: 5
+- Exact sequence match: YES
+- No differences in the five compared fields.
 
 ## case_16
 - Expected status: INCOMPLETE
@@ -187,10 +157,9 @@ Solution code and output.csv were not modified.
 - Expected status: INCOMPLETE
 - Predicted status: INCOMPLETE
 - Expected steps: 8
-- Predicted steps: 7
-- Exact sequence match: NO
-- Step 7: system_id: expected='security_service', predicted='support_platform'; resource_id: expected='audit_record_6793', predicted='support_9553'; operation: expected='VERIFY_RECORD_PRESENT', predicted='VERIFY_RECORD_REDACTED'; state: expected='PRESENT', predicted='REDACTED'
-- Expected step 8 is missing.
+- Predicted steps: 8
+- Exact sequence match: YES
+- No differences in the five compared fields.
 
 ## case_20
 - Expected status: INCOMPLETE
@@ -309,5 +278,5 @@ Solution code and output.csv were not modified.
 
 ## Summary
 - Cases evaluated: 32
-- Exact non-empty sequence matches: 7
-- Exact sequence accuracy: 21.88%
+- Exact non-empty sequence matches: 16
+- Exact sequence accuracy: 50.00%

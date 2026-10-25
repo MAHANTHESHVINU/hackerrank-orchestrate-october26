@@ -8,7 +8,8 @@ This report presents the quantitative and qualitative evaluation results of the 
 
 - **Evaluation Target**: 32 Benchmark Sample Requests (`dataset/sample_deletion_requests.csv`) vs Ground Truth (`dataset/sample_output.csv`), plus 3 Custom Edge Cases.
 - **Case-Level Status Accuracy**: **32/32 (100.00%)**
-- **Average Field Accuracy**: **82.78%**
+- **Average Field Accuracy**: **93.59%**
+- **Exact Sequence Accuracy**: **16/32 (50.00%)**
 - **Custom Edge Cases**: **3/3 Passed (100.00%)**
 - **Output Completeness**: **518/518 (100.00%)** cases evaluated and generated in `output.csv`.
 
@@ -23,9 +24,9 @@ This report presents the quantitative and qualitative evaluation results of the 
 | **Case-level Status Accuracy** | **100.00% (32/32)** | 100% |
 | **Total Expected Steps** | 193 | - |
 | **Total Predicted Steps** | 185 | - |
-| **Exact Step Matches** | 125 | - |
-| **Full Sequence Accuracy** | **21.88% (7/32)** | - |
-| **Average Field Accuracy** | **82.78%** | >80% |
+| **Exact Step Matches** | 161 | - |
+| **Full Sequence Accuracy** | **50.00% (16/32)** | - |
+| **Average Field Accuracy** | **93.59%** | >80% |
 
 ### 2.2 Field-Level Accuracy Breakdown
 
@@ -33,11 +34,11 @@ Each predicted step was matched against the corresponding expected step across a
 
 | Field | Accuracy | Description |
 | :--- | :---: | :--- |
-| `phase` | **96.67%** | Correct classification among FINDING, REMEDIATION, VERIFICATION |
-| `state` | **82.22%** | Correct resource state (PRESENT, ABSENT, REDACTED, ANONYMIZED, etc.) |
-| `system_id` | **81.11%** | Target system identification across 9 services |
-| `operation` | **79.44%** | Exact operation code matching required policy action |
-| `resource_id` | **74.44%** | Identifier resolution across primary and secondary stores |
+| `phase` | **100.00%** | Correct classification among FINDING, REMEDIATION, VERIFICATION |
+| `state` | **93.48%** | Correct resource state (PRESENT, ABSENT, REDACTED, ANONYMIZED, etc.) |
+| `system_id` | **93.48%** | Target system identification across 9 services |
+| `operation` | **93.48%** | Exact operation code matching required policy action |
+| `resource_id` | **87.50%** | Identifier resolution across primary and secondary stores |
 
 ---
 
@@ -79,7 +80,7 @@ To stress-test the pipeline on domain edge cases and subtle failure modes, we de
 
 ## 4. Failures Found and Improvements Made
 
-During development and continuous evaluation, four significant failure patterns were identified and systematically resolved:
+The latest sample evaluation increased exact sequence accuracy from **7/32 (21.88%)** to **16/32 (50.00%)**, while maintaining 100% status accuracy. The following evidence-parsing and step-generation failures were addressed:
 
 ### 1. False PII Violations on Redacted Audit Logs (`has_pii`)
 - **Failure**: Log parser extracted key-value pairs where values were literally `"null"` (e.g., `requester_name=null requester_email=null`). Standard string truthiness checks (`if val and val.strip()`) treated `"null"` as an active personal identifier, erroneously failing completed deletions.
@@ -93,10 +94,30 @@ During development and continuous evaluation, four significant failure patterns 
 - **Failure**: Non-deletion communications (such as data export requests or profile address updates) were treated as deletion requests with partial failures.
 - **Fix**: Introduced negative indicator heuristics and intent analysis in `is_deletion_requested()` to distinguish between Article 15 (SAR / Access) and Article 17 (Right to Erasure) requests, correctly yielding `NOT_APPLICABLE`.
 
-### 4. Step Ordering and Verification Serialization
-- **Failure**: Grader requires strict adherence to phase ordering (`FINDING` -> `REMEDIATION` -> `VERIFICATION`), internal operation sorting, and alphabetical sorting by `system_id` and `resource_id`.
-- **Fix**: Centralized step sorting under `step_sort_key()` with explicit integer ranks for operations and re-indexing step numbers from 1 to N after phase assembly.
+### 4. PDF evidence was silently skipped
+- **Failure**: `pypdf` was optional at import time, so a clean environment without it silently ignored PDF evidence. PDF text was also processed page-by-page, preventing metadata on a later page from classifying a resource found on an earlier page.
+- **Fix**: Added `pypdf` to `requirements.txt`, made the dependency required, and index extracted text across the complete PDF before associating identifiers and attachment metadata.
+
+### 5. Structured handover records were treated as unstructured text
+- **Failure**: Pipe-delimited `system | resource | category | state | identity` evidence was indexed for identifiers only. States such as `NOT_FOUND`, `ACTIVE`, `BLOCKED`, and categories such as `SUPPORT_ATTACHMENT` were not applied.
+- **Fix**: Parse the structured fields into record state and policy metadata. This corrected account-absence findings, active data-flow and restore-risk decisions, and attachment-versus-message operations.
+
+### 6. Security trace identity fields were not normalized
+- **Failure**: Security traces carrying `subject_ref` were indexed as resources but not linked to the corresponding user.
+- **Fix**: Normalize `subject_ref` and `subject_reference` alongside existing lookup and correlation keys. This restored evidence-backed retained-audit verification steps.
+
+### 7. Support deletion verification did not reflect the remediation
+- **Failure**: A subject-only attachment or legacy contact-index entry could be correctly scheduled for deletion but was verified as redacted.
+- **Fix**: Track support resources requiring deletion and emit `VERIFY_RECORD_ABSENT`; retain `VERIFY_RECORD_REDACTED` for shared support messages.
+
+### 8. JSON-formatted log events lost trace-linked subject identifiers
+- **Failure**: The log parser only read `key=value` fields, so structured JSON events could not inherit subject references from earlier lines in the same trace.
+- **Fix**: Parse JSON objects embedded in log lines and merge their fields into the existing trace context before indexing the resource. This recovers evidence-backed security audit links.
+
+### 9. Contact lookup records received the wrong policy operation
+- **Failure**: A successful `contact_lookup_completed` event with a matching record was treated as an analytics profile and anonymized, even though it represents a secondary contact identifier governed by the delete policy.
+- **Fix**: Classify successful contact lookup records as `SECONDARY_IDENTIFIER` and generate delete/absent-verification operations, following the corresponding deletion rule.
 
 ## Known Remaining Limitations
 
-Although sample status accuracy is 100%, exact full-sequence accuracy is 7/32 (21.88%). Sequence mismatches remain unresolved. For example, case_31 predicted account_541 instead of account_4857, and case_32 predicted account_542 instead of account_8858. The improvements described above did not eliminate every sequence-level failure. The output has been structurally evaluated, but these results do not establish full correctness on the hidden benchmark.
+Although sample status accuracy remains 100%, exact full-sequence accuracy is 16/32 (50.00%). Remaining errors include inferred account IDs that do not resolve to the resource IDs in the evidence (for example, case_31 and case_32), and anonymized analytics records whose available evidence contains no direct subject identifier. These links cannot be safely reconstructed without additional grounded identity relationships. The sample result does not establish correctness on the hidden benchmark.
