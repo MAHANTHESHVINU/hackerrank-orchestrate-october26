@@ -1291,32 +1291,6 @@ def analyze_case(case, user_id, emails, evidence_idx, evidence_manifest_dict,
     analytics_rids = sorted(resources["analytics"])
     analytics_anon_rids = []
 
-    # Supplement identity matching with successful anonymization events that
-    # fall within this request lifecycle. The record must also be indexed and
-    # contain no PII; activity alone does not establish user ownership.
-    request_time = case.get("requested_at", "")
-    reported_time = case.get("reported_at", "")
-    for activity in system_activity:
-        if activity.get("event_type") != "ANONYMIZE_RECORD":
-            continue
-        if activity.get("target_system") != "analytics_platform":
-            continue
-        if activity.get("reported_result") != "SUCCESS":
-            continue
-        event_time = activity.get("event_time", "")
-        if not request_time or not reported_time or not (request_time <= event_time <= reported_time):
-            continue
-        rid = activity.get("resource_id", "")
-        if rid not in evidence_idx.analytics_records:
-            continue
-        fid, rec = evidence_idx.analytics_records[rid]
-        if has_pii(rec):
-            continue
-        if rid not in analytics_rids:
-            analytics_rids.append(rid)
-        if all(existing_rid != rid for existing_rid, _ in analytics_anon_rids):
-            analytics_anon_rids.append((rid, fid))
-    analytics_rids.sort()
     for rid in analytics_rids:
         if rid in evidence_idx.analytics_records:
             fid, rec = evidence_idx.analytics_records[rid]
