@@ -16,10 +16,7 @@ import sys
 from collections import defaultdict
 from pathlib import Path
 
-try:
-    from pypdf import PdfReader
-except ImportError:
-    PdfReader = None
+from pypdf import PdfReader
 
 # ---------------------------------------------------------------------------
 # Paths
@@ -802,6 +799,14 @@ class EvidenceIndex:
                 k = match.group(1)
                 v = match.group(2) if match.group(2) is not None else match.group(3)
                 kv[k] = v
+            json_start = line_str.find("{")
+            if json_start >= 0:
+                try:
+                    structured_fields = json.loads(line_str[json_start:])
+                except json.JSONDecodeError:
+                    structured_fields = None
+                if isinstance(structured_fields, dict):
+                    kv.update(structured_fields)
             
             trace_id = kv.get("trace_id")
             if trace_id:
@@ -828,8 +833,12 @@ class EvidenceIndex:
                 if trace_id and trace_id in traces:
                     rec.update(traces[trace_id])
                 
-                # Check lookup_key or correlation_key
-                lookup = rec.get("lookup_key") or rec.get("subject_key") or rec.get("correlation_key")
+                # Normalize identity fields carried by the log line or its trace.
+                lookup = (
+                    rec.get("lookup_key") or rec.get("subject_key")
+                    or rec.get("subject_ref") or rec.get("subject_reference")
+                    or rec.get("correlation_key")
+                )
                 if lookup and lookup != "null":
                     if "@" in lookup:
                         rec["email"] = lookup
@@ -863,39 +872,53 @@ class EvidenceIndex:
                 if "enabled" in rec:
                     val = str(rec["enabled"]).lower()
                     rec["enabled"] = (val in ("true", "1"))
+
+                if (
+                    rec.get("event") == "contact_lookup_completed"
+                    and str(rec.get("rows", "")).isdigit()
+                    and int(rec["rows"]) > 0
+                ):
+                    rec["data_category"] = "SECONDARY_IDENTIFIER"
                 
                 self._classify_and_store(file_id, rid, rec)
 
     def _index_pdf(self, file_id, file_path):
         """Index PDF evidence files using pypdf."""
-        if not PdfReader:
-            return
         full_path = DATASET_DIR / file_path
         if not full_path.exists():
-            return
-        try:
-            reader = PdfReader(str(full_path))
-            for page in reader.pages:
-                text = page.extract_text()
-                if not text:
-                    continue
-                resource_matches = re.findall(
-                    r'(account_\d+|search_\d+|analytics_\d+|support_\d+|export_\d+|'
-                    r'backup_\d+|audit_record_\d+|data_flow_\d+|tombstone_\d+|'
-                    r'marketing_\d+)',
-                    text
+            raise FileNotFoundError(f"Evidence PDF not found: {full_path}")
+        reader = PdfReader(str(full_path))
+        page_texts = [page.extract_text() or "" for page in reader.pages]
+        document_text = "\n".join(page_texts)
+        records = {}
+        for page_text in page_texts:
+            resource_matches = re.findall(
+                r'(account_\d+|search_\d+|analytics_\d+|support_\d+|export_\d+|'
+                r'backup_\d+|audit_record_\d+|data_flow_\d+|tombstone_\d+|'
+                r'marketing_\d+)',
+                page_text
+            )
+            email_matches = re.findall(r'[\w.+-]+@[\w.-]+\.\w+', page_text)
+            user_matches = re.findall(r'user_\d+', page_text)
+            for rid in resource_matches:
+                rec = records.setdefault(
+                    rid, {"resource_id": rid, "_pdf_file": file_path}
                 )
-                email_matches = re.findall(r'[\w.+-]+@[\w.-]+\.\w+', text)
-                user_matches = re.findall(r'user_\d+', text)
-                for rid in resource_matches:
-                    rec = {"resource_id": rid, "_pdf_file": file_path}
-                    for em in email_matches:
-                        rec["email"] = em
-                    for uid in user_matches:
-                        rec["user_reference"] = uid
-                    self._classify_and_store(file_id, rid, rec)
-        except Exception:
-            pass
+                for em in email_matches:
+                    rec["email"] = em
+                for uid in user_matches:
+                    rec["user_reference"] = uid
+
+        is_subject_only_attachment = (
+            self.manifest[file_id].get("origin") == "support_platform"
+            and "attachment" in Path(file_path).name.lower()
+            and "uploader customer" in document_text.lower()
+        )
+        for rid, rec in records.items():
+            if is_subject_only_attachment:
+                rec["data_category"] = "SUPPORT_ATTACHMENT"
+                rec["belongs_only_to_subject"] = True
+            self._classify_and_store(file_id, rid, rec)
 
     def _index_text(self, file_id, file_path):
         """Index text evidence files."""
@@ -912,9 +935,21 @@ class EvidenceIndex:
             )
             email_matches = re.findall(r'[\w.+-]+@[\w.-]+\.\w+', line)
             user_matches = re.findall(r'user_\d+', line)
+            fields = [part.strip(" \t-") for part in line.split("|")]
+            category = fields[3].upper() if len(fields) >= 6 else ""
+            state = fields[4].upper() if len(fields) >= 6 else ""
             
             for rid in resource_matches:
                 rec = {"resource_id": rid, "_text_line": line.strip()}
+                if category and state:
+                    rec["data_category"] = category
+                    rec["record_state"] = state
+                    if category == "USER_PROFILE" and state in ("NOT_FOUND", "ABSENT", "DELETED"):
+                        rec["_absent"] = True
+                    elif category == "DATA_FLOW":
+                        rec["enabled"] = state == "ACTIVE"
+                    elif category == "BACKUP_ARCHIVE":
+                        rec["restore_allowed"] = state != "BLOCKED"
                 for em in email_matches:
                     rec["email"] = em
                 for uid in user_matches:
@@ -1085,7 +1120,7 @@ def find_user_resources(user_id, emails, evidence_idx, user_to_info, user_to_pho
                 resources["data_flow"].add(rid)
             elif rid.startswith("tombstone_"):
                 resources["tombstone"].add(rid)
-    
+
     return resources
 
 
@@ -1325,11 +1360,31 @@ def analyze_case(case, user_id, emails, evidence_idx, evidence_manifest_dict,
     # 3. Analytics Platform
     analytics_rids = sorted(resources["analytics"])
     analytics_anon_rids = []
+    analytics_delete_rids = set()
 
     for rid in analytics_rids:
         if rid in evidence_idx.analytics_records:
             fid, rec = evidence_idx.analytics_records[rid]
-            if has_pii(rec):
+            if rec.get("data_category") == "SECONDARY_IDENTIFIER":
+                is_complete = False
+                analytics_delete_rids.add(rid)
+                steps.append({
+                    "phase": "FINDING",
+                    "system_id": "analytics_platform",
+                    "resource_id": rid,
+                    "operation": "REPORT_REMAINING_RECORD",
+                    "state": "PRESENT",
+                    "evidence_id": fid,
+                })
+                steps.append({
+                    "phase": "REMEDIATION",
+                    "system_id": "analytics_platform",
+                    "resource_id": rid,
+                    "operation": "DELETE_RECORD",
+                    "state": "ABSENT",
+                    "evidence_id": "",
+                })
+            elif has_pii(rec):
                 # Has exposed PII - needs anonymization
                 is_complete = False
                 steps.append({
@@ -1355,6 +1410,7 @@ def analyze_case(case, user_id, emails, evidence_idx, evidence_manifest_dict,
     # 4. Support Platform
     support_rids = sorted(resources["support"])
     support_redacted_rids = []
+    support_delete_rids = set()
     for rid in support_rids:
         if rid not in evidence_idx.support_records:
             continue
@@ -1387,13 +1443,17 @@ def analyze_case(case, user_id, emails, evidence_idx, evidence_manifest_dict,
                 and ("only to" in attachment_text or "belongs only" in attachment_text
                      or rec.get("shared_context") is False))
         )
+        is_legacy_contact_index = rec.get("source") == "legacy_contact_index"
+        requires_deletion = is_subject_only_attachment or is_legacy_contact_index
 
         is_complete = False
+        if requires_deletion:
+            support_delete_rids.add(rid)
         steps.append({
             "phase": "FINDING",
             "system_id": "support_platform",
             "resource_id": rid,
-            "operation": "REPORT_REMAINING_RECORD" if is_subject_only_attachment else "REPORT_EXPOSED_PII",
+            "operation": "REPORT_REMAINING_RECORD" if requires_deletion else "REPORT_EXPOSED_PII",
             "state": "PRESENT",
             "evidence_id": fid,
         })
@@ -1401,8 +1461,8 @@ def analyze_case(case, user_id, emails, evidence_idx, evidence_manifest_dict,
             "phase": "REMEDIATION",
             "system_id": "support_platform",
             "resource_id": rid,
-            "operation": "DELETE_RECORD" if is_subject_only_attachment else "REDACT_RECORD",
-            "state": "ABSENT" if is_subject_only_attachment else "REDACTED",
+            "operation": "DELETE_RECORD" if requires_deletion else "REDACT_RECORD",
+            "state": "ABSENT" if requires_deletion else "REDACTED",
             "evidence_id": "",
         })
     
@@ -1678,12 +1738,13 @@ def analyze_case(case, user_id, emails, evidence_idx, evidence_manifest_dict,
             if rid in evidence_idx.support_records:
                 fid, rec = evidence_idx.support_records[rid]
                 if has_pii(rec):
+                    is_attachment = rid in support_delete_rids
                     verification_steps.append({
                         "phase": "VERIFICATION",
                         "system_id": "support_platform",
                         "resource_id": rid,
-                        "operation": "VERIFY_RECORD_REDACTED",
-                        "state": "REDACTED",
+                        "operation": "VERIFY_RECORD_ABSENT" if is_attachment else "VERIFY_RECORD_REDACTED",
+                        "state": "ABSENT" if is_attachment else "REDACTED",
                         "evidence_id": "",
                     })
         
@@ -1691,7 +1752,16 @@ def analyze_case(case, user_id, emails, evidence_idx, evidence_manifest_dict,
         for rid in analytics_rids:
             if rid in evidence_idx.analytics_records:
                 fid, rec = evidence_idx.analytics_records[rid]
-                if has_pii(rec):
+                if rid in analytics_delete_rids:
+                    verification_steps.append({
+                        "phase": "VERIFICATION",
+                        "system_id": "analytics_platform",
+                        "resource_id": rid,
+                        "operation": "VERIFY_RECORD_ABSENT",
+                        "state": "ABSENT",
+                        "evidence_id": "",
+                    })
+                elif has_pii(rec):
                     verification_steps.append({
                         "phase": "VERIFICATION",
                         "system_id": "analytics_platform",

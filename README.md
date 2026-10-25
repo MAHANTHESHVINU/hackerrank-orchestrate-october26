@@ -71,7 +71,7 @@ hackerrank-orchestrate-october26/
 
 - Python installed and accessible from PowerShell.
 - The challenge files and dataset available in the expected locations.
-- The Python dependencies required by the implementation.
+- The dependencies in `requirements.txt`.
 
 Check that Python is installed:
 
@@ -85,13 +85,11 @@ Navigate to the repository:
 cd D:\Projects\hackerrank-orchestrate-october26
 ```
 
-Install dependencies only if a dependency file is provided:
+Install the project dependencies from the repository root:
 
 ```powershell
-python -m pip install -r requirements.txt
+python -m pip install -r .\requirements.txt
 ```
-
-If `requirements.txt` is not present, install the dependencies documented by the implementation rather than creating an assumed dependency list.
 
 ## 4. Running the Solution
 
