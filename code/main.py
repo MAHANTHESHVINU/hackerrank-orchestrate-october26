@@ -1316,42 +1316,59 @@ def analyze_case(case, user_id, emails, evidence_idx, evidence_manifest_dict,
                 # Already anonymized
                 analytics_anon_rids.append((rid, fid))
     
-    # 4. Support Platform  
+    # 4. Support Platform
     support_rids = sorted(resources["support"])
     support_redacted_rids = []
     for rid in support_rids:
-        if rid in evidence_idx.support_records:
-            fid, rec = evidence_idx.support_records[rid]
-            if has_pii(rec):
-                # Has exposed PII - needs redaction (support messages are REDACT per rules)
-                is_complete = False
-                steps.append({
-                    "phase": "FINDING",
-                    "system_id": "support_platform",
-                    "resource_id": rid,
-                    "operation": "REPORT_EXPOSED_PII",
-                    "state": "PRESENT",
-                    "evidence_id": fid,
-                })
-                # Determine if DELETE or REDACT based on rules
-                # rule_05: SUPPORT_MESSAGE -> REDACT (if shared context)
-                # rule_06: SUPPORT_ATTACHMENT -> DELETE (if belongs only to subject)
-                # Default to REDACT for support tickets
-                steps.append({
-                    "phase": "REMEDIATION",
-                    "system_id": "support_platform",
-                    "resource_id": rid,
-                    "operation": "REDACT_RECORD",
-                    "state": "REDACTED",
-                    "evidence_id": "",
-                })
-            else:
-                support_redacted_rids.append((rid, fid))
-    
-    # Check if support record should be DELETE (attachment) vs REDACT (message)
-    # From sample: support records use DELETE_RECORD for case_07 (attachment)
-    # and REDACT_RECORD for case_19, case_29, case_30 (messages with shared context)
-    # We need to check the request_text and evidence
+        if rid not in evidence_idx.support_records:
+            continue
+        fid, rec = evidence_idx.support_records[rid]
+        if not has_pii(rec):
+            support_redacted_rids.append((rid, fid))
+            continue
+
+        # Apply the supplied SUPPORT_ATTACHMENT vs SUPPORT_MESSAGE rules from
+        # explicit record metadata. Unknown record types conservatively default
+        # to redaction because shared conversation context may need retention.
+        metadata_values = []
+        for key in ("data_category", "category", "record_type", "resource_type", "type"):
+            value = rec.get(key)
+            if isinstance(value, str):
+                metadata_values.append(value.strip().upper())
+        attachment_flag = any(
+            rec.get(key) is True
+            for key in ("is_attachment", "attachment_only", "belongs_only_to_subject")
+        )
+        attachment_text = " ".join(
+            str(rec.get(key, "")) for key in
+            ("file_name", "filename", "attachment_name", "resource_name", "description")
+        ).lower()
+        is_subject_only_attachment = (
+            attachment_flag
+            or any("SUPPORT_ATTACHMENT" == value or value.endswith("_ATTACHMENT")
+                   for value in metadata_values)
+            or (("attachment" in attachment_text or attachment_text.endswith((".pdf", ".png", ".jpg", ".jpeg")))
+                and ("only to" in attachment_text or "belongs only" in attachment_text
+                     or rec.get("shared_context") is False))
+        )
+
+        is_complete = False
+        steps.append({
+            "phase": "FINDING",
+            "system_id": "support_platform",
+            "resource_id": rid,
+            "operation": "REPORT_REMAINING_RECORD" if is_subject_only_attachment else "REPORT_EXPOSED_PII",
+            "state": "PRESENT",
+            "evidence_id": fid,
+        })
+        steps.append({
+            "phase": "REMEDIATION",
+            "system_id": "support_platform",
+            "resource_id": rid,
+            "operation": "DELETE_RECORD" if is_subject_only_attachment else "REDACT_RECORD",
+            "state": "ABSENT" if is_subject_only_attachment else "REDACTED",
+            "evidence_id": "",
+        })
     
     # 5. Export Service
     export_rids = sorted(resources["export"])
